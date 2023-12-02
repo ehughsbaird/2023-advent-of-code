@@ -25,6 +25,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 use std::fs;
+use std::cmp;
 
 struct Game {
     id: i32,
@@ -146,19 +147,21 @@ fn main() {
     // Sum of ids that are valid
     let mut sum = 0;
 
-    'game: for datum in data {
+    for datum in data {
         // Read the game in
         let game = Game::from_string(&datum);
-        // Ensure all the grabs are valid
+        let mut red = 0;
+        let mut green = 0;
+        let mut blue = 0;
+        // Find the max of each color from each grab
         for grab in &game.grabs {
-            // If any grab isn't valid, move on to the next game
-            if grab.red > 12 || grab.green > 13 || grab.blue > 14 {
-                continue 'game;
-            }
+            red = cmp::max(grab.red, red);
+            green = cmp::max(grab.green, green);
+            blue = cmp::max(grab.blue, blue);
         }
-        // If all grabs were valid, count this game
-        sum += game.id;
+        // Add the power to the sum
+        sum += red * green * blue;
     }
 
-    println!("Sum of passed games: {}", sum);
+    println!("Sum of powers: {}", sum);
 }
