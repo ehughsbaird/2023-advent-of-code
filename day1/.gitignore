@@ -1,2 +1,4 @@
 # Generated build output
 target/
+# cargo lock not necessary
+Cargo.lock
