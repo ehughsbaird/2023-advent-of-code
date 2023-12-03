@@ -77,8 +77,8 @@ fn main() {
         data.pop();
     }
 
-    // Points which we will try to parse
-    let mut parseable = HashSet::<(i32, i32)>::new();
+    // Points which we will try to parse, organized by gears they are around
+    let mut parseable: Vec<HashSet<(i32, i32)>> = vec![];
 
     // Points adjacent to the symbol point
     let mut tuples: Vec<(i32, i32)> = vec![];
@@ -88,34 +88,45 @@ fn main() {
         }
     }
 
-    // Look through the whole set for symbols (not digits or '.')
+    // Look through the whole set for gears
     for (y, line) in data.iter().enumerate() {
         for (x, sym) in line.iter().enumerate() {
-            if *sym == b'.' || char::from(*sym).is_ascii_digit() {
+            if *sym != b'*' {
                 continue;
             }
-            // When we find a digit adjacent to a symbol, mark to attempt to parse the number there
+            let mut candidates = HashSet::<(i32, i32)>::new();
+            // When we find a digit adjacent to a gear, mark to attempt to parse the number there
             for relative in &tuples {
                 let x = (x as i32 + relative.0) as usize;
                 let y = (y as i32 + relative.1) as usize;
                 if char::from(data[y][x]).is_ascii_digit() {
-                    parseable.insert((x as i32, y as i32));
+                    candidates.insert((x as i32, y as i32));
                 }
             }
+            // Add the numbers around this gear to the list
+            parseable.push(candidates);
         }
     }
 
-    // Sum of all values adjacent to a symbol
+    // Sum of all values
     let mut acc = 0;
 
     // Points we've already read, and thus shouldn't read again
     let mut dirty = HashSet::<(i32, i32)>::new();
-    for point in parseable {
-        // Points will fail to parse if they have already been read
-        match parse_point(point, &data, &mut dirty) {
-            Some(num) => acc += num,
-            None => continue,
+    for points in parseable {
+        let mut around = Vec::<i32>::new();
+        for point in points {
+            // Points will fail to parse if they have already been read
+            match parse_point(point, &data, &mut dirty) {
+                Some(num) => around.push(num),
+                None => continue,
+            }
         }
+        // Not actually a gear
+        if around.len() != 2 {
+            continue;
+        }
+        acc += around[0] * around[1];
     }
     println!("Total is {}", acc);
 }
