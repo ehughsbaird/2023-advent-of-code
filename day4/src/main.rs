@@ -24,13 +24,14 @@
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-use std::fs;
+use std::collections::HashMap;
 use std::collections::HashSet;
+use std::fs;
 
 struct Scratchcard {
     id: i32,
     winning: HashSet<i32>,
-    values: Vec<i32>
+    values: Vec<i32>,
 }
 
 impl Scratchcard {
@@ -52,32 +53,65 @@ impl Scratchcard {
         let mut winning = HashSet::<i32>::new();
         for parsed in split[0].split_whitespace().map(str::parse::<i32>) {
             match parsed {
-                Ok(int) => { winning.insert(int); },
-                Err(_) => panic!("Couldn't parse")
+                Ok(int) => {
+                    winning.insert(int);
+                }
+                Err(_) => panic!("Couldn't parse"),
             }
         }
         // Duplicate of above code, because I can't figure out how to handle the parse fail
         let mut values = Vec::<i32>::new();
         for parsed in split[1].split_whitespace().map(str::parse::<i32>) {
             match parsed {
-                Ok(int) => { values.push(int); },
-                Err(_) => panic!("Couldn't parse")
+                Ok(int) => {
+                    values.push(int);
+                }
+                Err(_) => panic!("Couldn't parse"),
             }
         }
-        return Scratchcard { id: id, winning: winning, values: values };
+        return Scratchcard {
+            id: id,
+            winning: winning,
+            values: values,
+        };
     }
-    fn score(&self) -> i32 {
+    fn matches(&self) -> i32 {
         let mut matched = 0;
         for val in &self.values {
             if self.winning.contains(&val) {
                 matched += 1;
             }
         }
+        return matched;
+    }
+    fn score(&self) -> i32 {
+        let matched = self.matches();
         if matched == 0 {
-            return 0
+            return 0;
         }
         return 1 << (matched - 1);
     }
+}
+
+fn score(cards: &Vec<Scratchcard>, card: usize, acc: &mut HashMap<usize, i32>) -> i32 {
+    match acc.get(&card) {
+        Some(extra) => return *extra,
+        _ => (),
+    }
+
+    let amount = cards[card].matches();
+
+    let mut ret: i32 = 1;
+    // The next amount cards
+    for i in 0..(amount as usize) {
+        // Offset by 1 so we don't visit the same card again
+        let idx = card + i + 1;
+        ret += score(cards, idx, acc);
+    }
+
+    // And memoize!
+    acc.insert(card, ret);
+    return ret;
 }
 
 fn main() {
@@ -85,14 +119,15 @@ fn main() {
     let file = fs::read_to_string("data.txt").expect("data.txt not found or busy");
     let mut data: Vec<&str> = file.split('\n').collect();
     // Get rid of empty string at the end
-    while data.last().unwrap_or(&"a").len() == 0 {
+    while data.last().unwrap().len() == 0 {
         data.pop();
     }
 
+    let data: Vec<Scratchcard> = data.into_iter().map(Scratchcard::from_string).collect();
     let mut sum = 0;
-    for datum in data {
-        let card = Scratchcard::from_string(datum);
-        sum += card.score();
+    let mut acc = HashMap::<usize, i32>::new();
+    for i in 0..data.len() {
+        sum += score(&data, i, &mut acc);
     }
-    println!("Sum is {}", sum);
+    println!("In total, {} scratchcards", sum);
 }
