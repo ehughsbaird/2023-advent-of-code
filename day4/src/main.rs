@@ -24,109 +24,75 @@
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-use std::collections::HashSet;
 use std::fs;
+use std::collections::HashSet;
 
-// Read a number that has a digit at provided point
-// point.0 is index in data[point.1]
-// Dirty is points that have already been visited
-fn parse_point(
-    point: (i32, i32),
-    data: &Vec<&[u8]>,
-    dirty: &mut HashSet<(i32, i32)>,
-) -> Option<i32> {
-    if dirty.contains(&point) {
-        return None;
-    }
-    let mut start: i32 = point.0;
-    let mut end: i32 = point.0;
-    let line = data[point.1 as usize];
+struct Scratchcard {
+    id: i32,
+    winning: HashSet<i32>,
+    values: Vec<i32>
+}
 
-    while start >= 0 {
-        if !char::from(line[start as usize]).is_ascii_digit() {
-            break;
+impl Scratchcard {
+    fn from_string(string: &str) -> Scratchcard {
+        // Format is Game %d: Grab*, so split off the game name and the grabs
+        let split: Vec<&str> = string.split(':').collect();
+        // So we can find the id
+        let mut id: i32 = -1;
+        // Walk through the id string until we find the first digit, then parse the rest
+        for (idx, c) in split[0].char_indices() {
+            if c.is_ascii_digit() {
+                id = (split[0][idx..]).parse::<i32>().unwrap();
+                break;
+            }
         }
-        dirty.insert((start, point.1));
-        start -= 1;
-    }
-    // We go to the next one, but we'll always have failed to read, so walk back to the last valid
-    // digit
-    start += 1;
-
-    while (end as usize) < line.len() {
-        if !char::from(line[end as usize]).is_ascii_digit() {
-            break;
+        // Now, we get the games
+        let split: Vec<&str> = split[1].split('|').collect();
+        // Map is pretty cool, huh
+        let mut winning = HashSet::<i32>::new();
+        for parsed in split[0].split_whitespace().map(str::parse::<i32>) {
+            match parsed {
+                Ok(int) => { winning.insert(int); },
+                Err(_) => panic!("Couldn't parse")
+            }
         }
-        dirty.insert((end, point.1));
-        end += 1;
+        // Duplicate of above code, because I can't figure out how to handle the parse fail
+        let mut values = Vec::<i32>::new();
+        for parsed in split[1].split_whitespace().map(str::parse::<i32>) {
+            match parsed {
+                Ok(int) => { values.push(int); },
+                Err(_) => panic!("Couldn't parse")
+            }
+        }
+        return Scratchcard { id: id, winning: winning, values: values };
     }
-    // We go to the next one, but we'll always have failed to read, so walk back to the last valid
-    // digit
-    end -= 1;
-
-    let num_str = std::str::from_utf8(&line[(start as usize)..=(end as usize)]).unwrap();
-    return Some(num_str.parse::<i32>().unwrap());
+    fn score(&self) -> i32 {
+        let mut matched = 0;
+        for val in &self.values {
+            if self.winning.contains(&val) {
+                matched += 1;
+            }
+        }
+        if matched == 0 {
+            return 0
+        }
+        return 1 << (matched - 1);
+    }
 }
 
 fn main() {
     // Read our calibration file and split it by line
-    let file = fs::read("data.txt").expect("data.txt not found or busy");
-    let mut data: Vec<&[u8]> = file.split(|c| -> bool { *c == b'\n' }).collect();
+    let file = fs::read_to_string("data.txt").expect("data.txt not found or busy");
+    let mut data: Vec<&str> = file.split('\n').collect();
     // Get rid of empty string at the end
-    while data.last().unwrap().len() == 0 {
+    while data.last().unwrap_or(&"a").len() == 0 {
         data.pop();
     }
 
-    // Points which we will try to parse, organized by gears they are around
-    let mut parseable: Vec<HashSet<(i32, i32)>> = vec![];
-
-    // Points adjacent to the symbol point
-    let mut tuples: Vec<(i32, i32)> = vec![];
-    for x in -1..=1 {
-        for y in -1..=1 {
-            tuples.push((x, y));
-        }
+    let mut sum = 0;
+    for datum in data {
+        let card = Scratchcard::from_string(datum);
+        sum += card.score();
     }
-
-    // Look through the whole set for gears
-    for (y, line) in data.iter().enumerate() {
-        for (x, sym) in line.iter().enumerate() {
-            if *sym != b'*' {
-                continue;
-            }
-            let mut candidates = HashSet::<(i32, i32)>::new();
-            // When we find a digit adjacent to a gear, mark to attempt to parse the number there
-            for relative in &tuples {
-                let x = (x as i32 + relative.0) as usize;
-                let y = (y as i32 + relative.1) as usize;
-                if char::from(data[y][x]).is_ascii_digit() {
-                    candidates.insert((x as i32, y as i32));
-                }
-            }
-            // Add the numbers around this gear to the list
-            parseable.push(candidates);
-        }
-    }
-
-    // Sum of all values
-    let mut acc = 0;
-
-    // Points we've already read, and thus shouldn't read again
-    let mut dirty = HashSet::<(i32, i32)>::new();
-    for points in parseable {
-        let mut around = Vec::<i32>::new();
-        for point in points {
-            // Points will fail to parse if they have already been read
-            match parse_point(point, &data, &mut dirty) {
-                Some(num) => around.push(num),
-                None => continue,
-            }
-        }
-        // Not actually a gear
-        if around.len() != 2 {
-            continue;
-        }
-        acc += around[0] * around[1];
-    }
-    println!("Total is {}", acc);
+    println!("Sum is {}", sum);
 }
