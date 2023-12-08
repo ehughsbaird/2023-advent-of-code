@@ -40,6 +40,28 @@ enum Hand {
     FiveOfAKind(i32),
 }
 
+fn promote(hand: Hand, jokers: i32) -> Hand {
+    if jokers == 0 {
+        return hand;
+    }
+    match hand {
+        // Lucky!
+        Hand::FiveOfAKind(_) => hand,
+        // Can't be zero, must be either 1 or 4
+        Hand::FourOfAKind(val) => Hand::FiveOfAKind(val),
+        // Can't be zero, must be 2 or 3
+        Hand::FullHouse(val) => Hand::FiveOfAKind(val),
+        Hand::ThreeOfAKind(val) => Hand::FourOfAKind(val),
+        Hand::TwoPair(val) => match jokers {
+            1 => Hand::FullHouse(val),
+            2 => Hand::FourOfAKind(val),
+            _ => panic!("How do you have {} jokers", jokers),
+        },
+        Hand::OnePair(val) => Hand::ThreeOfAKind(val),
+        Hand::HighCard(val) => Hand::OnePair(val),
+    }
+}
+
 fn parse_to_hand(string: &str) -> Hand {
     let mut value: i32 = 0;
     let mut card_map = HashMap::<char, i32>::new();
@@ -49,16 +71,16 @@ fn parse_to_hand(string: &str) -> Hand {
             'A' => 13,
             'K' => 12,
             'Q' => 11,
-            'J' => 10,
-            'T' => 9,
-            '9' => 8,
-            '8' => 7,
-            '7' => 6,
-            '6' => 5,
-            '5' => 4,
-            '4' => 3,
-            '3' => 2,
-            '2' => 1,
+            'J' => 1,
+            'T' => 10,
+            '9' => 9,
+            '8' => 8,
+            '7' => 7,
+            '6' => 6,
+            '5' => 5,
+            '4' => 4,
+            '3' => 3,
+            '2' => 2,
             _ => panic!(),
         };
         if card_map.contains_key(&c) {
@@ -68,34 +90,34 @@ fn parse_to_hand(string: &str) -> Hand {
         }
     }
     if card_map.len() == 1 {
-        return Hand::FiveOfAKind(value);
+        return promote(Hand::FiveOfAKind(value), *card_map.get(&'J').unwrap_or(&0));
     }
     if card_map.len() == 2 {
         for (k, v) in &card_map {
             if *v == 4 || *v == 1 {
-                return Hand::FourOfAKind(value);
+                return promote(Hand::FourOfAKind(value), *card_map.get(&'J').unwrap_or(&0));
             }
             if *v == 3 || *v == 2 {
-                return Hand::FullHouse(value);
+                return promote(Hand::FullHouse(value), *card_map.get(&'J').unwrap_or(&0));
             }
         }
     }
     let mut pairs = 0;
     for (k, v) in &card_map {
         if *v == 3 {
-            return Hand::ThreeOfAKind(value);
+            return promote(Hand::ThreeOfAKind(value), *card_map.get(&'J').unwrap_or(&0));
         }
         if *v == 2 {
             pairs += 1;
         }
     }
     if pairs == 2 {
-        return Hand::TwoPair(value);
+        return promote(Hand::TwoPair(value), *card_map.get(&'J').unwrap_or(&0));
     }
     if pairs == 1 {
-        return Hand::OnePair(value);
+        return promote(Hand::OnePair(value), *card_map.get(&'J').unwrap_or(&0));
     }
-    return Hand::HighCard(value);
+    return promote(Hand::HighCard(value), *card_map.get(&'J').unwrap_or(&0));
 }
 
 fn main() {
