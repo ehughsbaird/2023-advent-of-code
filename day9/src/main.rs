@@ -33,8 +33,8 @@ fn parse_or_panic<T: std::str::FromStr>(string: &str) -> T {
     }
 }
 
-fn extrapolate_seq(seq : &Vec<i32>) -> i32 {
-    let last = seq[seq.len() - 1];
+fn extrapolate_seq(seq: &Vec<i32>) -> i32 {
+    let first = seq[0];
     let mut little = Vec::<i32>::new();
     let mut all_zero = true;
     for i in 1..seq.len() {
@@ -44,7 +44,12 @@ fn extrapolate_seq(seq : &Vec<i32>) -> i32 {
             all_zero = false;
         }
     }
-    return last + if all_zero { 0 } else { extrapolate_seq(&little) };
+    return first
+        - if all_zero {
+            0
+        } else {
+            extrapolate_seq(&little)
+        };
 }
 
 fn main() {
@@ -53,7 +58,7 @@ fn main() {
     while data.last().unwrap().len() == 0 {
         data.pop();
     }
-    let data : Vec<Vec<i32>> = data
+    let data: Vec<Vec<i32>> = data
         .into_iter()
         .map(|x: &str| -> Vec<i32> { x.split_whitespace().map(parse_or_panic).collect() })
         .collect();
