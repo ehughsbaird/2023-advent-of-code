@@ -39,6 +39,19 @@ enum Tile {
     SE,
 }
 
+fn tile_to_char(t: &Tile) -> char {
+    match *t {
+        Tile::NS => '║',
+        Tile::EW => '═',
+        Tile::NE => '╚',
+        Tile::NW => '╝',
+        Tile::SW => '╗',
+        Tile::SE => '╔',
+        Tile::Start => 'S',
+        Tile::Ground => '.',
+    }
+}
+
 fn char_to_tile(c: char) -> Tile {
     match c {
         '|' => Tile::NS,
@@ -96,8 +109,53 @@ fn advance(
     return None;
 }
 
+fn canvas(data: &Vec<Vec<Tile>>, visited: &HashSet<(usize, usize)>, start: (usize, usize)) {
+    for i in 0..data.len() {
+        for j in 0..data[i].len() {
+            if start == (i, j) {
+                print!("@");
+            } else if visited.contains(&(i, j)) {
+                print!("#");
+            } else {
+                print!(" ");
+            }
+        }
+        println!();
+    }
+    for i in 0..data.len() {
+        for j in 0..data[i].len() {
+            if visited.contains(&(i, j)) {
+                print!(" ");
+            } else {
+                print!("{}", tile_to_char(&data[i][j]));
+            }
+        }
+        println!();
+    }
+}
+
+fn neighbors(pos: (usize, usize), data: &Vec<Vec<Tile>>) -> Vec<(usize, usize)> {
+    let mut ret = vec![];
+    if pos.0 < 0 || pos.0 >= data.len() || pos.1 < 0 || pos.1 >= data[pos.0].len() {
+        return ret;
+    }
+    if pos.0 > 0 {
+        ret.push((pos.0 - 1, pos.1));
+    }
+    if pos.0 < data.len() - 1 {
+        ret.push((pos.0 + 1, pos.1));
+    }
+    if pos.1 > 0 {
+        ret.push((pos.0, pos.1 - 1));
+    }
+    if pos.1 < data[pos.0].len() - 1 {
+        ret.push((pos.0, pos.1 + 1));
+    }
+    return ret;
+}
+
 fn main() {
-    let data = fs::read_to_string("data.txt").expect("data.txt not found");
+    let data = fs::read_to_string("i2.txt").expect("data.txt not found");
     let mut data: Vec<&str> = data.split('\n').collect();
     while data.last().unwrap().len() == 0 {
         data.pop();
@@ -120,12 +178,7 @@ fn main() {
 
     // Find the two pipes leading in to the start tile
     let mut cursors = vec![];
-    for (i, j) in vec![
-        (start.0 - 1, start.1),
-        (start.0 + 1, start.1),
-        (start.0, start.1 - 1),
-        (start.0, start.1 + 1),
-    ] {
+    for (i, j) in neighbors((start.0, start.1), &data) {
         if (i, j) == start {
             continue;
         }
@@ -133,29 +186,96 @@ fn main() {
             cursors.push((i, j));
         }
     }
+    canvas(&data, &HashSet::<(usize, usize)>::new(), start);
 
     // Walk each cursor along until they meet
-    let mut visited = HashSet::<(usize, usize)>::new();
-    visited.insert(start);
-    let mut cursorA = cursors[0];
-    let mut cursorB = cursors[1];
+    let mut loop_tiles = HashSet::<(usize, usize)>::new();
+    loop_tiles.insert(start);
+    let mut cursor_a = cursors[0];
+    let mut cursor_b = cursors[1];
     let mut steps = 0;
     loop {
         steps += 1;
 
-        visited.insert(cursorA);
-        match advance(cursorA, &data[cursorA.0][cursorA.1], &visited) {
-            Some(new) => cursorA = new,
+        loop_tiles.insert(cursor_a);
+        match advance(cursor_a, &data[cursor_a.0][cursor_a.1], &loop_tiles) {
+            Some(new) => cursor_a = new,
             // Cursors met!
             None => break,
         }
 
-        visited.insert(cursorB);
-        match advance(cursorB, &data[cursorB.0][cursorB.1], &visited) {
-            Some(new) => cursorB = new,
+        loop_tiles.insert(cursor_b);
+        match advance(cursor_b, &data[cursor_b.0][cursor_b.1], &loop_tiles) {
+            Some(new) => cursor_b = new,
             // Cursors met!
             None => break,
         }
     }
+    canvas(&data, &loop_tiles, start);
     println!("farthest is {} steps", steps);
+
+    // Find the enclosed area by flood-filling from each tile. Area inside the loop is counted by
+    // the area of the flood-fills that terminate only by hitting loop tiles
+    let mut visited = HashSet::<(usize, usize)>::new();
+    let mut total_area = 0;
+    for i in 0..data.len() {
+        for j in 0..data[1].len() {
+            if visited.contains(&(i, j)) {
+                continue;
+            }
+            if loop_tiles.contains(&(i, j)) {
+                continue;
+            }
+            // We're at a fresh, unvisited tile
+            // We want to keep track of:
+            // - how many tiles we visited
+            // - What the tiles we've yet to visit are
+            // - If we've terminated by hitting a edge of the map
+            let mut area = 0;
+            let mut queue = Vec::<(usize, usize)>::new();
+            let mut seen = HashSet::<(usize, usize)>::new();
+            queue.push((i, j));
+            let mut enclosed = true;
+            while !queue.is_empty() {
+                let start = queue[queue.len() - 1];
+                queue.pop();
+                seen.insert(start);
+                area += 1;
+                let next = neighbors((start.0, start.1), &data);
+                if next.len() != 4 {
+                    enclosed = false;
+                }
+                for (di, dj) in next {
+                    if seen.contains(&(di, dj)) {
+                        continue;
+                    }
+                    if loop_tiles.contains(&(di, dj)) {
+                        let one = dir1((di, dj), &data[i][j]);
+                        let two = dir1((di, dj), &data[i][j]);
+                        if !seen.contains(&one) && loop_tiles.contains(&one) && (dir1(one, &data[one.0][one.1]) == one || dir2(one, &data[one.0][one.1]) == one) {
+                            queue.push(one);
+                        }
+                        seen.insert(one);
+                        if !seen.contains(&two) && loop_tiles.contains(&two) && (dir1(two, &data[two.0][two.1]) == two || dir2(two, &data[two.0][two.1]) == two) {
+                            queue.push(two);
+                        }
+                        seen.insert(two);
+                        continue;
+                    }
+                    queue.push((di, dj));
+                    seen.insert((di, dj));
+                }
+            }
+            println!("============================");
+            canvas(&data, &seen, (i, j));
+            if enclosed {
+                println!("Adding {} tiles", area);
+                total_area += area;
+            }
+            for pos in seen {
+                visited.insert(pos);
+            }
+        }
+    }
+    println!("Total area enclosed: {}", total_area);
 }
